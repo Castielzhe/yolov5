@@ -14,6 +14,7 @@ from collections import OrderedDict, namedtuple
 from copy import copy
 from pathlib import Path
 from urllib.parse import urlparse
+import torch.nn.functional as F
 
 import cv2
 import numpy as np
@@ -60,6 +61,7 @@ class Conv(nn.Module):
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         super().__init__()
+
         self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=False)
         self.bn = nn.BatchNorm2d(c2)
         self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()
@@ -176,7 +178,16 @@ class C3(nn.Module):
         self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)))
 
     def forward(self, x):
-        return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+        # 分支1
+        z1 = self.cv1(x)  # 通道降维
+        z1 = self.m(z1)  # 高阶特征提取
+        # 分支2
+        z2 = self.cv2(x)    # 通道降维
+        # 分支合并 --> 按通道合并
+        z = torch.cat((z1, z2), 1)
+        # 卷积融合特征
+        z = self.cv3(z)
+        return z
 
 
 class C3x(C3):
@@ -240,9 +251,12 @@ class SPPF(nn.Module):
         x = self.cv1(x)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')  # suppress torch 1.9.0 max_pool2d() warning
-            y1 = self.m(x)
-            y2 = self.m(y1)
-            return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
+            y1 = self.m(x)  # 5*5池化
+            y2 = self.m(y1)  # 相当于原始feature map上的9*9池化
+            y3 = self.m(y2)  # 相当于原始feature map上的13*13池化
+            y = torch.cat([x, y1, y2, y3], 1)
+            return self.cv2(y)
+            # return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
 
 
 class Focus(nn.Module):
@@ -322,6 +336,58 @@ class Concat(nn.Module):
 
     def forward(self, x):
         return torch.cat(x, self.d)
+
+
+class Normalize(nn.Module):
+    def __init__(self, c1, num=20):
+        super(Normalize, self).__init__()
+        self.scale_weight = nn.Parameter(torch.ones(c1) * num)
+
+    def forward(self, x):
+        return self.scale_weight.view(1, -1, 1, 1) * F.normalize(x)
+
+
+class DownSampling(nn.Module):
+    """
+    下采样:组合卷积和池化下两种方法的下采样
+    卷积+池化 --> 1*1卷积
+    """
+    def __init__(self, c1, c2, k=3, p=1):
+        super(DownSampling, self).__init__()
+        self.cv1 = Conv(c1, c1, k, 2, p)
+        self.pool1 = nn.MaxPool2d(k, 2, p)
+        self.cv2 = Conv(2 * c1, c2)
+
+    def forward(self, x):
+        z1 = self.cv1(x)
+        z2 = self.pool1(x)
+        z = torch.concat([z1, z2], dim=1)
+        z = self.cv2(z)
+        return z
+
+
+class UpSampling(nn.Module):
+    """
+    上采样操作:合并反卷积 + UpSampling --> conv合并通道
+    """
+
+    def __init__(self, c1, c2, mode='nearest'):
+        super(UpSampling, self).__init__()
+        self.b1 = nn.Upsample(None, 2, mode)
+        # noinspection PyTypeChecker
+        self.b2 = nn.Sequential(
+            nn.ConvTranspose2d(c1, c1, 3, stride=2, padding=1),
+            nn.BatchNorm2d(c1),
+            Conv.default_act
+        )
+        self.c1 = Conv(c1 * 2, c2)
+
+    def forward(self, x):
+        z1 = self.b1(x)
+        z2 = self.b2(x)
+        z = torch.concat([z1, z2], dim=1)
+        z = self.c1(z)
+        return z
 
 
 class DetectMultiBackend(nn.Module):

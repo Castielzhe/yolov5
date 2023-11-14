@@ -115,17 +115,17 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
         new_shape = (new_shape, new_shape)
 
     # Scale ratio (new / old)
-    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])  # 获得从旧的shape映射到新的shape的最小尺度
     if not scaleup:  # only scale down, do not scale up (for better val mAP)
-        r = min(r, 1.0)
+        r = min(r, 1.0)  # 保证r只会小于等于1.0 -->原始图像的shape有一个边是大于目标shape的时候,不进行放大处理 -->整个图像只做缩小,不做放大
 
     # Compute padding
     ratio = r, r  # width, height ratios
-    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
-    if auto:  # minimum rectangle
+    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))  # 得到等比例缩放的宽度和高度
+    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding 计算填充大小
+    if auto:  # minimum rectangle 是否做最小填充操作
         dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
-    elif scaleFill:  # stretch
+    elif scaleFill:  # stretch 是否做非等比例缩放
         dw, dh = 0.0, 0.0
         new_unpad = (new_shape[1], new_shape[0])
         ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]  # width, height ratios
@@ -134,7 +134,7 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
     dh /= 2
 
     if shape[::-1] != new_unpad:  # resize
-        im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
+        im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)  # 图像缩放
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
     im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
@@ -153,20 +153,20 @@ def random_perspective(im,
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(0.1, 0.1), scale=(0.9, 1.1), shear=(-10, 10))
     # targets = [cls, xyxy]
 
-    height = im.shape[0] + border[0] * 2  # shape(h,w,c)
-    width = im.shape[1] + border[1] * 2
+    height = im.shape[0] + border[0] * 2  # shape(h,w,c) 获取最终希望的图像高度信息
+    width = im.shape[1] + border[1] * 2  # 获取最终期望的图像的宽度信息
 
-    # Center
+    # Center 平移 --> 后面做了缩放和旋转  缩放旋转的点是图像的中心点
     C = np.eye(3)
     C[0, 2] = -im.shape[1] / 2  # x translation (pixels)
     C[1, 2] = -im.shape[0] / 2  # y translation (pixels)
 
-    # Perspective
+    # Perspective 透视变换映射矩阵
     P = np.eye(3)
     P[2, 0] = random.uniform(-perspective, perspective)  # x perspective (about y)
     P[2, 1] = random.uniform(-perspective, perspective)  # y perspective (about x)
 
-    # Rotation and Scale
+    # Rotation and Scale 旋转加缩放
     R = np.eye(3)
     a = random.uniform(-degrees, degrees)
     # a += random.choice([-180, -90, 0, 90])  # add 90deg rotations to small rotations

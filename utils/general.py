@@ -713,8 +713,9 @@ def labels_to_class_weights(labels, nc=80):
 def labels_to_image_weights(labels, nc=80, class_weights=np.ones(80)):
     # Produces image weights based on class_weights and image contents
     # Usage: index = random.choices(range(n), weights=image_weights, k=1)  # weighted image sample
-    class_counts = np.array([np.bincount(x[:, 0].astype(int), minlength=nc) for x in labels])
-    return (class_weights.reshape(1, nc) * class_counts).sum(1)
+    # 统计每个图像中,各个类别边框出现的数量
+    class_counts = np.array([np.bincount(img_label[:, 0].astype(int), minlength=nc) for img_label in labels])
+    return (class_weights.reshape(1, nc) * class_counts).sum(1) # 得到每个图像的权重信息
 
 
 def coco80_to_coco91_class():  # converts 80-index (val2014) to 91-index (paper)
