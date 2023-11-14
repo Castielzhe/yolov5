@@ -30,14 +30,22 @@ def check_anchor_order(m):
 def check_anchors(dataset, model, thr=4.0, imgsz=640):
     # Check anchor fit to data, recompute if necessary
     m = model.module.model[-1] if hasattr(model, 'module') else model.model[-1]  # Detect()
-    shapes = imgsz * dataset.shapes / dataset.shapes.max(1, keepdims=True)
-    scale = np.random.uniform(0.9, 1.1, size=(shapes.shape[0], 1))  # augment scale
+    shapes = imgsz * dataset.shapes / dataset.shapes.max(1, keepdims=True) # 在最大图像的边保证为imgsz的情况下,其他图像等比例缩放后的shape大小
+    scale = np.random.uniform(0.9, 1.1, size=(shapes.shape[0], 1))  # augment scale 随机一个缩放比
+    # wh '真实'边框的大小,shape为:[M,2]表示整个数据集中总共有M个真实边框
     wh = torch.tensor(np.concatenate([l[:, 3:5] * s for s, l in zip(shapes * scale, dataset.labels)])).float()  # wh
 
-    def metric(k):  # compute metric
+    def metric(k):  # compute metric 计算先验边框k和'真实'边框wh之间的'覆盖'情况
+        """
+        计算评估指标
+        :param k: [N, 2] 表示先验框总共有N个
+
+        """
+        # ([M,2] -> [M,1,2]) / ([N,2] -> [1, N,2]) -->[M, N, 2] 计算每个真实边框和每个anchor box边框之间w和h的比值
+        # 如果真实边框和anchor box边框个的大小越靠近,那么比值就越靠近1
         r = wh[:, None] / k[None]
-        x = torch.min(r, 1 / r).min(2)[0]  # ratio metric
-        best = x.max(1)[0]  # best_x
+        x = torch.min(r, 1 / r).min(2)[0]  # ratio metric 在每个gt和每个anchor box之间,选择w和h两者之间差异最大的比值(越不接近) 让所有真实边框和anchor box边框大小接近的对应值为1, 其他均小于1, 并且越不接近,越接近0
+        best = x.max(1)[0]  # best_x 针对每个gt选择一个最匹配的anchor box对应的匹配值
         aat = (x > 1 / thr).float().sum(1).mean()  # anchors above threshold
         bpr = (best > 1 / thr).float().mean()  # best possible recall
         return bpr, aat
@@ -51,13 +59,14 @@ def check_anchors(dataset, model, thr=4.0, imgsz=640):
     else:
         LOGGER.info(f'{s}Anchors are a poor fit to dataset ⚠️, attempting to improve...')
         na = m.anchors.numel() // 2  # number of anchors
-        anchors = kmean_anchors(dataset, n=na, img_size=imgsz, thr=thr, gen=1000, verbose=False)
-        new_bpr = metric(anchors)[0]
+        anchors = kmean_anchors(dataset, n=na, img_size=imgsz, thr=thr, gen=1000, verbose=False) # 计算新的anchor box尺度
+        new_bpr = metric(anchors)[0] # 计算新的anchor box和GT之间的bpr评估指标
         if new_bpr > bpr:  # replace anchors
+            # 如果新的anchor box比老的anchor box 好,做一个覆盖替代的操作
             anchors = torch.tensor(anchors, device=m.anchors.device).type_as(m.anchors)
             m.anchors[:] = anchors.clone().view_as(m.anchors)
             check_anchor_order(m)  # must be in pixel-space (not grid-space)
-            m.anchors /= stride
+            m.anchors /= stride  # 把anchor box在原始图像上的wh映射到feature map上的wh
             s = f'{PREFIX}Done ✅ (optional: update model *.yaml to use these anchors in the future)'
         else:
             s = f'{PREFIX}Done ⚠️ (original anchors better than new anchors, proceeding with original anchors)'
@@ -92,7 +101,7 @@ def kmean_anchors(dataset='./data/coco128.yaml', n=9, img_size=640, thr=4.0, gen
         # x = wh_iou(wh, torch.tensor(k))  # iou metric
         return x, x.max(1)[0]  # x, best_x
 
-    def anchor_fitness(k):  # mutation fitness
+    def anchor_fitness(k):  # mutation fitness 针对每个GT获取一个最匹配先验框以及对应的匹配值
         _, best = metric(torch.tensor(k, dtype=torch.float32), wh)
         return (best * (best > thr).float()).mean()  # fitness
 
@@ -115,11 +124,11 @@ def kmean_anchors(dataset='./data/coco128.yaml', n=9, img_size=640, thr=4.0, gen
         from utils.dataloaders import LoadImagesAndLabels
         dataset = LoadImagesAndLabels(data_dict['train'], augment=True, rect=True)
 
-    # Get label wh
+    # Get label wh 获取真实边框的wh
     shapes = img_size * dataset.shapes / dataset.shapes.max(1, keepdims=True)
     wh0 = np.concatenate([l[:, 3:5] * s for s, l in zip(shapes, dataset.labels)])  # wh
 
-    # Filter
+    # Filter 过滤
     i = (wh0 < 3.0).any(1).sum()
     if i:
         LOGGER.info(f'{PREFIX}WARNING ⚠️ Extremely small objects found: {i} of {len(wh0)} labels are <3 pixels in size')
@@ -151,15 +160,15 @@ def kmean_anchors(dataset='./data/coco128.yaml', n=9, img_size=640, thr=4.0, gen
     # ax[1].hist(wh[wh[:, 1]<100, 1],400)
     # fig.savefig('wh.png', dpi=200)
 
-    # Evolve
+    # Evolve 修正
     f, sh, mp, s = anchor_fitness(k), k.shape, 0.9, 0.1  # fitness, generations, mutation prob, sigma
     pbar = tqdm(range(gen), bar_format=TQDM_BAR_FORMAT)  # progress bar
     for _ in pbar:
         v = np.ones(sh)
         while (v == 1).all():  # mutate until a change occurs (prevent duplicates)
             v = ((npr.random(sh) < mp) * random.random() * npr.randn(*sh) * s + 1).clip(0.3, 3.0)
-        kg = (k.copy() * v).clip(min=2.0)
-        fg = anchor_fitness(kg)
+        kg = (k.copy() * v).clip(min=2.0) # 当前随机的一个先验框尺度(在之前的中心点的基础上做一个小的扰动)
+        fg = anchor_fitness(kg)  # 计算当前随机的先验框的评估指标
         if fg > f:
             f, k = fg, kg.copy()
             pbar.desc = f'{PREFIX}Evolving anchors with Genetic Algorithm: fitness = {f:.4f}'

@@ -8,12 +8,12 @@
 
 
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
-path: ../datasets/coco128  # dataset root dir
-train: images/train2017  # train images (relative to 'path') 128 images
-val: images/train2017  # val images (relative to 'path') 128 images
-test:  # test images (optional)
+path: ../datasets/coco128  # dataset root dir 给定数据所在路径
+train: images/train2017  # train images (relative to 'path') 128 images 给定相对于path参数给定的路径而言,训练数据所在的相对路径
+val: images/train2017  # val images (relative to 'path') 128 images 同train参数,但是是训练过程中的测试数据集的路径
+test:  # test images (optional) 同train,但是是验证数据集
 
-# Classes
+# Classes 给定目标的类别标签,从0开始
 names:
   0: person
   1: bicycle
@@ -97,5 +97,5 @@ names:
   79: toothbrush
 
 
-# Download script/URL (optional)
+# Download script/URL (optional) 给定如果数据不存在,那么进行下载操作的对应执行脚本命令
 download: https://ultralytics.com/assets/coco128.zip

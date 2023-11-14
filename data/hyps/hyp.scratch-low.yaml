@@ -3,32 +3,32 @@
 # python train.py --batch 64 --cfg yolov5n6.yaml --weights '' --data coco.yaml --img 640 --epochs 300 --linear
 # See tutorials for hyperparameter evolution https://github.com/ultralytics/yolov5#tutorials
 
-lr0: 0.01  # initial learning rate (SGD=1E-2, Adam=1E-3)
-lrf: 0.01  # final OneCycleLR learning rate (lr0 * lrf)
-momentum: 0.937  # SGD momentum/Adam beta1
-weight_decay: 0.0005  # optimizer weight decay 5e-4
-warmup_epochs: 3.0  # warmup epochs (fractions ok)
+lr0: 0.01  # initial learning rate (SGD=1E-2, Adam=1E-3) 初始学习率
+lrf: 0.01  # final OneCycleLR learning rate (lr0 * lrf) 学习率变化过程的变换最终收敛的权重值, 每次的更新学习率=lr0*c_lrf, c_lrf是1.0到lrf的变化值
+momentum: 0.937  # SGD momentum/Adam beta1  动量法系数
+weight_decay: 0.0005  # optimizer weight decay 5e-4 L2惩罚项系数
+warmup_epochs: 3.0  # warmup epochs (fractions ok) 给定warmup操作epoch的阈值
 warmup_momentum: 0.8  # warmup initial momentum
 warmup_bias_lr: 0.1  # warmup initial bias lr
-box: 0.05  # box loss gain
-cls: 0.5  # cls loss gain
-cls_pw: 1.0  # cls BCELoss positive_weight
+box: 0.05  # box loss gain 给定边框回归损失的系数
+cls: 0.5  # cls loss gain 给定类别分类的系数
+cls_pw: 1.0  # cls BCELoss positive_weight 给定类别判断损失中正样本(属于这类别)的权重
 obj: 1.0  # obj loss gain (scale with pixels)
-obj_pw: 1.0  # obj BCELoss positive_weight
+obj_pw: 1.0  # obj BCELoss positive_weight 是否有物体判断损失中,正样本(有物体)的权重
 iou_t: 0.20  # IoU training threshold
-anchor_t: 4.0  # anchor-multiple threshold
+anchor_t: 4.0  # anchor-multiple threshold 自动计算anchor box时候的高度和宽度比例的阈值  为啥是4 -->因为现在的推理的边框高宽转换公式为(2*sigmoid(tw))**2 * Pw
 # anchors: 3  # anchors per output layer (0 to ignore)
-fl_gamma: 0.0  # focal loss gamma (efficientDet default gamma=1.5)
-hsv_h: 0.015  # image HSV-Hue augmentation (fraction)
-hsv_s: 0.7  # image HSV-Saturation augmentation (fraction)
-hsv_v: 0.4  # image HSV-Value augmentation (fraction)
-degrees: 0.0  # image rotation (+/- deg)
-translate: 0.1  # image translation (+/- fraction)
-scale: 0.5  # image scale (+/- gain)
-shear: 0.0  # image shear (+/- deg)
-perspective: 0.0  # image perspective (+/- fraction), range 0-0.001
-flipud: 0.0  # image flip up-down (probability)
-fliplr: 0.5  # image flip left-right (probability)
-mosaic: 1.0  # image mosaic (probability)
-mixup: 0.0  # image mixup (probability)
-copy_paste: 0.0  # segment copy-paste (probability)
+fl_gamma: 0.0  # focal loss gamma (efficientDet default gamma=1.5)是否使用focal loss
+hsv_h: 0.015  # image HSV-Hue augmentation (fraction) h增强的参数
+hsv_s: 0.7  # image HSV-Saturation augmentation (fraction) s增强的参数
+hsv_v: 0.4  # image HSV-Value augmentation (fraction) v增强的参数
+degrees: 0.0  # image rotation (+/- deg) 图像旋转允许的角度大小
+translate: 0.1  # image translation (+/- fraction) 图像运行的平移大小
+scale: 0.5  # image scale (+/- gain) 图像运行的缩放大小
+shear: 0.0  # image shear (+/- deg) 图像的选择剪切
+perspective: 0.0  # image perspective (+/- fraction), range 0-0.001 透视变换的超参数
+flipud: 0.0  # image flip up-down (probability) 控制上下交换阈值
+fliplr: 0.5  # image flip left-right (probability) 控制左右交换的阈值
+mosaic: 1.0  # image mosaic (probability) 控制mosaic数据增强的阈值
+mixup: 0.0  # image mixup (probability) 控制mixup图像增强的阈值
+copy_paste: 0.0  # segment copy-paste (probability) 是否基于mosaic之后的图像分割数据重新规划目标检测的labels信息 - 概率阈值
